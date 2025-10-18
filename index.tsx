@@ -32,61 +32,12 @@ interface ShopifyProduct {
 type UserRole = 'admin' | 'user';
 
 interface User {
-  email: string;
-  passwordHash: string; // Storing plain text password for this simulation
+  email: string; // Will now hold Employee ID
+  passwordHash: string;
   role: UserRole;
 }
 
 type Page = 'login' | 'app' | 'admin';
-
-// --- USER MANAGEMENT SERVICE (using localStorage) ---
-const userService = {
-  initialize: () => {
-    const users = localStorage.getItem('app_users');
-    if (!users) {
-      const initialAdmins: User[] = [
-        { email: 'juan.vazquezr@coppel.com', passwordHash: 'Nomeacuerdo05**', role: 'admin' },
-        { email: 'juanazuldiego@gmail.com', passwordHash: 'Nomeacuerdo05**', role: 'admin' },
-        { email: 'marketplace@coppel.com', passwordHash: 'Coppel123', role: 'user' },
-      ];
-      localStorage.setItem('app_users', JSON.stringify(initialAdmins));
-    }
-  },
-  getUsers: (): User[] => {
-    const users = localStorage.getItem('app_users');
-    return users ? JSON.parse(users) : [];
-  },
-  saveUsers: (users: User[]) => {
-    localStorage.setItem('app_users', JSON.stringify(users));
-  },
-  authenticate: (email: string, password_raw: string): User | null => {
-    const users = userService.getUsers();
-    const foundUser = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.passwordHash === password_raw);
-    return foundUser || null;
-  },
-  addUser: (user: User): boolean => {
-    const users = userService.getUsers();
-    if (users.some(u => u.email.toLowerCase() === user.email.toLowerCase())) {
-      return false; // User already exists
-    }
-    users.push(user);
-    userService.saveUsers(users);
-    return true;
-  },
-  deleteUser: (email: string): void => {
-    let users = userService.getUsers();
-    users = users.filter(u => u.email.toLowerCase() !== email.toLowerCase());
-    userService.saveUsers(users);
-  },
-  updatePassword: (email: string, newPassword_raw: string): void => {
-    const users = userService.getUsers();
-    const userIndex = users.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
-    if (userIndex !== -1) {
-      users[userIndex].passwordHash = newPassword_raw;
-      userService.saveUsers(users);
-    }
-  }
-};
 
 // --- COMPONENTS ---
 
@@ -170,7 +121,7 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
   return (
     <>
       <header className="app-header">
-        <div className="user-info">Bienvenido, {user.email}</div>
+        <div className="user-info">Bienvenido, Empleado #{user.email}</div>
         <nav className="app-nav">
           {user.role === 'admin' && <button className="btn btn-nav" onClick={() => onNavigate('admin')}>Panel de Admin</button>}
           <button className="btn btn-nav" onClick={onLogout}>Cerrar Sesión</button>
@@ -197,56 +148,9 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
   );
 };
 
-// Admin Panel Component
+// Admin Panel Component (Unreachable and disabled)
 const AdminPage: React.FC<{ user: User, onNavigate: (page: Page) => void }> = ({ user, onNavigate }) => {
-    const [users, setUsers] = useState<User[]>(userService.getUsers());
-    const [newUserEmail, setNewUserEmail] = useState('');
-    const [newUserPassword, setNewUserPassword] = useState('');
-    const [newUserRole, setNewUserRole] = useState<UserRole>('user');
-    const [newPassword, setNewPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
     const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
-
-    const handleAddUser = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newUserEmail || !newUserPassword) {
-            setMessage({ text: 'Correo y contraseña son requeridos.', type: 'error' });
-            return;
-        }
-        const success = userService.addUser({ email: newUserEmail, passwordHash: newUserPassword, role: newUserRole });
-        if (success) {
-            setMessage({ text: 'Usuario agregado exitosamente.', type: 'success' });
-            setUsers(userService.getUsers());
-            setNewUserEmail('');
-            setNewUserPassword('');
-        } else {
-            setMessage({ text: 'El usuario ya existe.', type: 'error' });
-        }
-    };
-
-    const handleDeleteUser = (email: string) => {
-        if (window.confirm(`¿Estás seguro que quieres eliminar al usuario ${email}?`)) {
-            userService.deleteUser(email);
-            setUsers(userService.getUsers());
-            setMessage({ text: 'Usuario eliminado.', type: 'success' });
-        }
-    };
-
-    const handleChangePassword = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (newPassword !== confirmPassword) {
-            setMessage({ text: 'Las contraseñas no coinciden.', type: 'error' });
-            return;
-        }
-        if (newPassword.length < 6) {
-             setMessage({ text: 'La contraseña debe tener al menos 6 caracteres.', type: 'error' });
-            return;
-        }
-        userService.updatePassword(user.email, newPassword);
-        setMessage({ text: 'Contraseña actualizada exitosamente.', type: 'success' });
-        setNewPassword('');
-        setConfirmPassword('');
-    };
 
     return (
         <div className="admin-container">
@@ -259,28 +163,29 @@ const AdminPage: React.FC<{ user: User, onNavigate: (page: Page) => void }> = ({
 
             <div className="admin-section">
                 <h3>Cambiar mi Contraseña</h3>
-                <form onSubmit={handleChangePassword} className="admin-form">
-                    <input type="password" placeholder="Nueva Contraseña" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
-                    <input type="password" placeholder="Confirmar Nueva Contraseña" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
-                    <button type="submit" className="btn btn-primary">Actualizar Contraseña</button>
+                <form onSubmit={(e) => e.preventDefault()} className="admin-form">
+                    <input type="password" placeholder="Nueva Contraseña" required disabled />
+                    <input type="password" placeholder="Confirmar Nueva Contraseña" required disabled />
+                    <button type="submit" className="btn btn-primary" disabled>Actualizar Contraseña</button>
                 </form>
             </div>
 
             <div className="admin-section">
                 <h3>Agregar Nuevo Usuario</h3>
-                <form onSubmit={handleAddUser} className="admin-form">
-                    <input type="email" placeholder="Correo electrónico" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} required />
-                    <input type="password" placeholder="Contraseña" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} required />
-                    <select value={newUserRole} onChange={e => setNewUserRole(e.target.value as UserRole)}>
+                <form onSubmit={(e) => e.preventDefault()} className="admin-form">
+                    <input type="email" placeholder="Correo electrónico" required disabled />
+                    <input type="password" placeholder="Contraseña" required disabled />
+                    <select disabled>
                         <option value="user">Usuario</option>
                         <option value="admin">Administrador</option>
                     </select>
-                    <button type="submit" className="btn btn-primary">Agregar Usuario</button>
+                    <button type="submit" className="btn btn-primary" disabled>Agregar Usuario</button>
                 </form>
             </div>
 
             <div className="admin-section">
                 <h3>Gestionar Usuarios</h3>
+                <p>La gestión de usuarios no está disponible con el inicio de sesión por número de empleado.</p>
                 <table className="user-table">
                     <thead>
                         <tr>
@@ -290,17 +195,7 @@ const AdminPage: React.FC<{ user: User, onNavigate: (page: Page) => void }> = ({
                         </tr>
                     </thead>
                     <tbody>
-                        {users.map(u => (
-                            <tr key={u.email}>
-                                <td>{u.email}</td>
-                                <td>{u.role}</td>
-                                <td>
-                                    {user.email !== u.email && (
-                                        <button className="btn-delete" onClick={() => handleDeleteUser(u.email)}>Eliminar</button>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
+                        <tr><td colSpan={3} style={{textAlign: 'center'}}>No hay usuarios para gestionar.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -311,19 +206,32 @@ const AdminPage: React.FC<{ user: User, onNavigate: (page: Page) => void }> = ({
 
 // Login Component
 const LoginPage: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
-  const [email, setEmail] = useState('');
+  const [employeeId, setEmployeeId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    const user = userService.authenticate(email, password);
-    if (user) {
-      onLogin(user);
-    } else {
-      setError('Credenciales inválidas. Por favor, inténtalo de nuevo.');
+
+    if (!/^\d{8}$/.test(employeeId) || !employeeId.startsWith('90')) {
+      setError('Numero de empleado incorrecto.');
+      return;
     }
+
+    const expectedPassword = employeeId.slice(-4);
+    if (password !== expectedPassword) {
+      setError('Contraseña incorrecta.');
+      return;
+    }
+
+    const user: User = {
+      email: employeeId,
+      passwordHash: '',
+      role: 'user',
+    };
+    
+    onLogin(user);
   };
 
   return (
@@ -331,12 +239,26 @@ const LoginPage: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => 
       <div className="container">
         <div className="header">
           <h1>Iniciar Sesión</h1>
-          <p>Accede al Extractor de Productos Shopify.</p>
+          <p>Accede con tu número de empleado.</p>
         </div>
         <form onSubmit={handleSubmit} className="form">
           <div className="input-group vertical">
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Correo electrónico" required className="url-input"/>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Contraseña" required className="url-input"/>
+            <input 
+              type="text" 
+              value={employeeId} 
+              onChange={(e) => setEmployeeId(e.target.value.replace(/[^0-9]/g, ''))}
+              placeholder="#Empleado" 
+              required 
+              className="url-input"
+            />
+            <input 
+              type="password" 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+              placeholder="Contraseña" 
+              required 
+              className="url-input"
+            />
           </div>
            {error && <div className="error-message" style={{marginTop: '1rem'}}>{error}</div>}
           <button type="submit" className="btn btn-primary" style={{marginTop: '1rem', width: '100%'}}>Entrar</button>
@@ -351,10 +273,6 @@ const LoginPage: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [page, setPage] = useState<Page>('login');
-
-  useEffect(() => {
-    userService.initialize();
-  }, []);
   
   const handleLogin = (user: User) => {
     setCurrentUser(user);
@@ -377,7 +295,8 @@ const App: React.FC = () => {
       case 'app':
         return currentUser && <ExtractorPage user={currentUser} onNavigate={handleNavigation} onLogout={handleLogout} />;
       case 'admin':
-        return currentUser?.role === 'admin' && <AdminPage user={currentUser} onNavigate={handleNavigation} />;
+        // A user can still try to navigate here, but it will be a disabled page
+        return currentUser && <AdminPage user={currentUser} onNavigate={handleNavigation} />;
       case 'login':
       default:
         return <LoginPage onLogin={handleLogin} />;
