@@ -74,7 +74,7 @@ body {
 .header p {
   font-size: 1rem;
   color: #666;
-  max-width: 450px;
+  max-width: 500px;
   margin: 0 auto;
 }
 
@@ -110,6 +110,56 @@ body {
   box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
 }
 
+/* Store Type Selector */
+.store-selector {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.store-selector .btn {
+  background-color: #e9ecef;
+  color: #495057;
+  flex-grow: 1;
+}
+
+.store-selector .btn.active {
+  background-color: #4a90e2;
+  color: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Shopify Method Selector */
+.shopify-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+.method-selector {
+  display: flex;
+  gap: 0.5rem;
+  padding: 4px;
+  background-color: #e9ecef;
+  border-radius: 8px;
+}
+.method-selector .btn {
+  flex-grow: 1;
+  padding: 0.5rem;
+  font-size: 0.9rem;
+  background-color: transparent;
+  box-shadow: none;
+  border: 1px solid transparent;
+}
+.method-selector .btn.active {
+  background-color: #fff;
+  color: #333;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  border-color: #ddd;
+}
+
+
 /* Buttons */
 .btn {
   padding: 0.8rem 1.5rem;
@@ -118,7 +168,7 @@ body {
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: background-color 0.2s, transform 0.1s;
+  transition: background-color 0.2s, transform 0.1s, box-shadow 0.2s;
   display: inline-flex;
   justify-content: center;
   align-items: center;
@@ -150,6 +200,15 @@ body {
 
 .btn-secondary:hover {
   background-color: #218838;
+}
+
+.btn-tertiary {
+    background-color: #6c757d;
+    color: white;
+}
+
+.btn-tertiary:hover {
+    background-color: #5a6268;
 }
 
 .btn-nav {
@@ -208,6 +267,16 @@ body {
 .success-message {
   color: #28a745;
   font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.export-buttons {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
 }
 
 .success-message-banner {
