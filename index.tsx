@@ -47,6 +47,7 @@ const userService = {
       const initialAdmins: User[] = [
         { email: 'juan.vazquezr@coppel.com', passwordHash: 'Nomeacuerdo05**', role: 'admin' },
         { email: 'juanazuldiego@gmail.com', passwordHash: 'Nomeacuerdo05**', role: 'admin' },
+        { email: 'marketplace@coppel.com', passwordHash: 'Coppel123', role: 'user' },
       ];
       localStorage.setItem('app_users', JSON.stringify(initialAdmins));
     }
