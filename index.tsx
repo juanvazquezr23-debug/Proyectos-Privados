@@ -165,10 +165,39 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
   const showHelp = (topicKey: keyof typeof HELP_GUIDES) => setActiveHelp(HELP_GUIDES[topicKey]);
   const hideHelp = () => setActiveHelp(null);
 
-  const fetchWithCors = (url: string, options?: RequestInit) => {
-    const proxyUrl = 'https://api.codetabs.com/v1/proxy?quest=';
-    return fetch(`${proxyUrl}${url}`, options);
-  }
+  /**
+   * Securely fetches data via our own backend proxy.
+   * This is the new, secure way to handle all cross-origin API requests.
+   */
+  const fetchViaBackendProxy = async (targetUrl: string, options?: RequestInit) => {
+    // The frontend sends the target URL and options to our own backend.
+    const response = await fetch('/api/proxy', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: targetUrl,
+        options: {
+            ...options,
+            // The backend will attach sensitive headers (like API keys)
+            // ensuring they are never exposed client-side.
+        },
+      }),
+    });
+
+    if (!response.ok) {
+        const errorBody = await response.text();
+        console.error("Backend proxy error:", errorBody);
+        throw new Error(`Error en la comunicación con el servidor: ${response.statusText}`);
+    }
+    
+    // We also need to handle Link headers for pagination, passed back from the proxy
+    const linkHeader = response.headers.get('proxy-link');
+    const responseData = await response.json();
+
+    return { data: responseData, linkHeader };
+  };
   
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -184,7 +213,8 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
     while (true) {
       setLoadingMessage(`Extrayendo productos de Shopify (Público)... página ${page}`);
       const productsJsonUrl = `${storeUrl.href}/products.json?limit=${limit}&page=${page}`;
-      const response = await fetch(productsJsonUrl);
+      // This is a public URL, so a direct fetch is often okay, but proxying is safer.
+      const response = await fetch(productsJsonUrl); 
       if (!response.ok) throw new Error('No se pudo acceder a los productos. Asegúrate de que la URL es correcta y es una tienda Shopify.');
       
       const data = await response.json();
@@ -207,22 +237,19 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
 
     while (nextUrl) {
         setLoadingMessage(`Extrayendo productos de Shopify (API Privada)...`);
-        const response = await fetchWithCors(nextUrl, {
+        const { data, linkHeader } = await fetchViaBackendProxy(nextUrl, {
             headers: { 'X-Shopify-Access-Token': apiToken },
         });
 
-        if (!response.ok) {
-            if (response.status === 401 || response.status === 403) throw new Error('Acceso no autorizado. Revisa el nombre de la tienda y el Token de Acceso.');
-            throw new Error('No se pudo conectar a la API de Shopify. Revisa los datos y que la App privada tenga permisos de lectura de productos.');
+        if (data.errors) {
+             throw new Error(`Error de la API de Shopify: ${JSON.stringify(data.errors)}`);
         }
-
-        const data = await response.json();
+        
         if (data.products && data.products.length > 0) {
             allProducts = allProducts.concat(data.products);
             setLoadingMessage(`Encontrados ${allProducts.length} productos...`);
         }
 
-        const linkHeader = response.headers.get('Link');
         if (linkHeader) {
             const links = linkHeader.split(', ');
             const nextLink = links.find(link => link.includes('rel="next"'));
@@ -247,10 +274,8 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
 
       setLoadingMessage('Obteniendo lista de productos de PrestaShop...');
       const productsListUrl = `${apiEndpoint}/products?ws_key=${key}&output_format=JSON`;
-      const listResponse = await fetchWithCors(productsListUrl);
-      if (!listResponse.ok) throw new Error('No se pudo conectar a la API de PrestaShop. Revisa la URL, la clave de API y la configuración de CORS.');
+      const { data: listData } = await fetchViaBackendProxy(productsListUrl);
       
-      const listData = await listResponse.json();
       if (!listData.products || listData.products.length === 0) return [];
       
       const productIds = listData.products.map((p: any) => p.id);
@@ -260,9 +285,8 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
           const id = productIds[i];
           setLoadingMessage(`Procesando producto ${i + 1} de ${productIds.length}...`);
           const productUrl = `${apiEndpoint}/products/${id}?ws_key=${key}&output_format=JSON`;
-          const productResponse = await fetchWithCors(productUrl);
-          if (productResponse.ok) {
-              const productData = await productResponse.json();
+          const { data: productData } = await fetchViaBackendProxy(productUrl);
+          if (productData.product) {
               const transformedProduct = await transformPrestaShopToShopify(productData.product, storeOrigin, key);
               allProducts.push(transformedProduct);
           }
@@ -279,9 +303,8 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
         if (psProduct.associations.combinations && psProduct.associations.combinations.length > 0) {
              for(const comboRef of psProduct.associations.combinations) {
                 const comboUrl = `${storeOrigin}/api/combinations/${comboRef.id}?ws_key=${apiKey}&output_format=JSON`;
-                const comboRes = await fetchWithCors(comboUrl);
-                if(comboRes.ok) {
-                    const comboData = await comboRes.json();
+                const { data: comboData } = await fetchViaBackendProxy(comboUrl);
+                if(comboData.combination) {
                     const combination = comboData.combination;
                     const price = parseFloat(psProduct.price) + parseFloat(combination.price);
                     
@@ -337,19 +360,13 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
         while(true) {
             setLoadingMessage(`Extrayendo productos de Tienda Nube... página ${page}`);
             const productsUrl = `${apiEndpoint}/products?page=${page}&per_page=${limit}`;
-            const response = await fetchWithCors(productsUrl, {
+            const { data: productsData } = await fetchViaBackendProxy(productsUrl, {
                 headers: {
                     'Authentication': `bearer ${token}`,
                     'User-Agent': 'Product Extractor App'
                 }
             });
 
-            if (!response.ok) {
-                if(response.status === 401) throw new Error('Acceso no autorizado. Revisa tu ID de tienda y tu Token de Acceso.');
-                throw new Error('No se pudo conectar a la API de Tienda Nube.');
-            }
-            
-            const productsData = await response.json();
             if (productsData && productsData.length > 0) {
                 const transformedProducts = productsData.map(transformTiendaNubeToShopify);
                 allProducts = allProducts.concat(transformedProducts);
@@ -407,7 +424,7 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
       while(true) {
         setLoadingMessage(`Extrayendo productos de VTEX... (${totalFetched} encontrados)`);
         const searchUrl = `https://${accountName}.vtexcommercestable.com.br/api/catalog_system/pub/products/search?_from=${from}&_to=${to}`;
-        const response = await fetchWithCors(searchUrl, {
+        const { data: productsData } = await fetchViaBackendProxy(searchUrl, {
           headers: {
             'X-VTEX-API-AppKey': appKey,
             'X-VTEX-API-AppToken': appToken,
@@ -415,9 +432,6 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
           }
         });
 
-        if(!response.ok) throw new Error('No se pudo conectar a la API de VTEX. Revisa el nombre de la cuenta, AppKey y AppToken.');
-        
-        const productsData = await response.json();
         if (productsData && productsData.length > 0) {
           const transformed = productsData.map(transformVtexToShopify);
           allProducts = allProducts.concat(transformed);
@@ -474,10 +488,8 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
             apiUrl.searchParams.append('per_page', limit.toString());
             apiUrl.searchParams.append('page', page.toString());
             
-            const response = await fetchWithCors(apiUrl.toString());
-            if (!response.ok) throw new Error('No se pudo conectar a la API de WooCommerce. Revisa la URL y las claves.');
-
-            const productsData = await response.json();
+            const { data: productsData } = await fetchViaBackendProxy(apiUrl.toString());
+            
             if (productsData && productsData.length > 0) {
                 const transformed = productsData.map(transformWooCommerceToShopify);
                 allProducts = allProducts.concat(transformed);
