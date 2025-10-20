@@ -50,46 +50,67 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   
   /**
-   * Fetches data using the corsproxy.io service as requested for testing and stability.
-   * This implementation includes a timeout and robust error handling for various scenarios.
+   * Fetches data using a series of public CORS proxies for resilience.
+   * This implementation tries multiple proxy services, includes a timeout, 
+   * and provides robust error handling for various scenarios.
    */
   const fetchWithCors = async (targetUrl: string) => {
-    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15-second timeout
+    const proxies = [
+        `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`
+    ];
 
-    try {
-        const response = await fetch(proxyUrl, { signal: controller.signal });
-        clearTimeout(timeoutId);
+    let lastError: Error | null = null;
 
-        if (response.status === 404) {
-            throw new Error('Error 404: No se encontró la tienda o la página de productos. Por favor, verifica que la URL de la tienda sea correcta.');
-        }
+    for (const proxyUrl of proxies) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15-second timeout
 
-        if (!response.ok) {
-            throw new Error(`La tienda Shopify o el proxy respondieron con un error ${response.status}. Asegúrate de que la URL es correcta.`);
-        }
+        try {
+            const response = await fetch(proxyUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
 
-        const shopifyData = await response.json();
-        return { data: shopifyData };
-
-    } catch (err) {
-        clearTimeout(timeoutId); 
-        if (err instanceof Error) {
-            if (err.name === 'AbortError') {
-                throw new Error('La solicitud tardó demasiado (timeout). El servidor proxy o la tienda Shopify pueden estar lentos. Inténtalo de nuevo.');
+            if (response.ok) {
+                const shopifyData = await response.json();
+                return { data: shopifyData }; // Success!
             }
-            if (err instanceof SyntaxError) {
-                throw new Error('Se recibió una respuesta, pero no es un formato de productos válido. ¿Estás seguro de que es una tienda Shopify?');
+
+            // If not OK, build an error and we'll try the next proxy.
+            if (response.status === 404) {
+                 lastError = new Error('Error 404: No se encontró la tienda o la página de productos. Por favor, verifica que la URL de la tienda sea correcta.');
+            } else {
+                 lastError = new Error(`El proxy o la tienda respondieron con un error ${response.status}. Asegúrate de que la URL es correcta.`);
             }
-            // If it's one of our custom errors from above, just re-throw it.
-            if (err.message.startsWith('Error 404') || err.message.startsWith('La tienda Shopify')) {
-                throw err;
+            continue; // try next proxy
+
+        } catch (err) {
+            clearTimeout(timeoutId);
+            if (err instanceof Error) {
+                lastError = err;
+            } else {
+                // Should not happen, but for type safety
+                lastError = new Error('An unknown fetch error occurred.');
             }
+            // Continue to the next proxy
         }
-        // For any other kind of network failure (e.g., proxy is down, CORS issue, no internet)
-        throw new Error('Error de red al contactar el servicio de proxy. Revisa tu conexión a internet y asegúrate de que no haya un bloqueador de anuncios o firewall interfiriendo.');
     }
+
+    // If we've looped through all proxies and none worked, throw a detailed error.
+    if (lastError) {
+        if (lastError.name === 'AbortError') {
+            throw new Error('La solicitud tardó demasiado (timeout). Los servidores proxy o la tienda Shopify pueden estar lentos. Inténtalo de nuevo.');
+        }
+        if (lastError instanceof SyntaxError) {
+            throw new Error('Se recibió una respuesta, pero no es un formato de productos válido. ¿Estás seguro de que es una tienda Shopify?');
+        }
+        // Re-throw specific HTTP errors if they were the last ones encountered
+        if (lastError.message.startsWith('Error 404') || lastError.message.startsWith('El proxy o la tienda')) {
+            throw lastError;
+        }
+    }
+    
+    // For any other kind of network failure (e.g., proxy is down, CORS issue, no internet)
+    throw new Error('Todos los servicios de proxy han fallado. Revisa tu conexión a internet y asegúrate de que no haya un bloqueador de anuncios o firewall interfiriendo.');
   };
   
   // --- SHOPIFY ---
