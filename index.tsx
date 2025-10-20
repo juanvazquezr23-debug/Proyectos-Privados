@@ -54,22 +54,42 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
    * This is necessary for the app to function in a browser-only environment.
    */
   const fetchWithCors = async (targetUrl: string, options?: RequestInit) => {
-    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
-    const response = await fetch(proxyUrl, options);
-  
+    // Replaced corsproxy.io with allorigins.win for better reliability without a VPN.
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+    
+    let response;
+    try {
+        response = await fetch(proxyUrl, options);
+    } catch (networkError) {
+        console.error("Error de red al contactar el proxy:", networkError);
+        throw new Error('Error de red al contactar el servicio de proxy. Por favor, revisa tu conexión a internet e inténtalo de nuevo.');
+    }
+
     if (!response.ok) {
-      const errorText = await response.text();
-      try {
-        const errorJson = JSON.parse(errorText);
-        throw new Error(`Error de la API: ${response.status} - ${JSON.stringify(errorJson.errors || errorJson)}`);
-      } catch (e) {
-        throw new Error(`Error de red o del proxy: ${response.status} ${response.statusText}. Por favor, inténtalo de nuevo más tarde.`);
-      }
+      throw new Error(`El servicio de proxy devolvió un error: ${response.status} ${response.statusText}.`);
     }
   
-    const data = await response.json();
-  
-    return { data };
+    const proxyData = await response.json();
+    
+    // Check for errors from the target URL (Shopify) reported by the proxy
+    if (proxyData.status && proxyData.status.http_code >= 400) {
+        if (proxyData.status.http_code === 404) {
+            throw new Error('Error 404: No se encontró la tienda o la página de productos. Por favor, verifica que la URL sea correcta.');
+        }
+        throw new Error(`La tienda devolvió un error HTTP ${proxyData.status.http_code}. Puede que no sea una tienda Shopify válida o que no sea accesible públicamente.`);
+    }
+    
+    if (!proxyData.contents) {
+      throw new Error('El proxy no pudo obtener el contenido de la URL. La URL podría ser incorrecta o la tienda podría estar bloqueando el acceso.');
+    }
+
+    try {
+        const data = JSON.parse(proxyData.contents);
+        return { data };
+    } catch (e) {
+        console.error("Fallo al procesar la respuesta JSON de Shopify:", proxyData.contents);
+        throw new Error('La respuesta de la tienda no es un formato válido. Asegúrate de que la URL corresponde a una tienda Shopify.');
+    }
   };
   
   // --- SHOPIFY ---
