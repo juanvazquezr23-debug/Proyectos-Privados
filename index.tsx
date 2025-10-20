@@ -50,49 +50,45 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   
   /**
-   * Fetches data using a public CORS proxy.
-   * This is necessary for the app to function in a browser-only environment.
+   * Fetches data using our own Vercel serverless function as a proxy.
+   * This is a robust solution to bypass CORS issues without relying on unstable public proxies.
    */
-  const fetchWithCors = async (targetUrl: string, options?: RequestInit) => {
-    // The corsproxy.io service allows cross-origin requests.
-    const encodedUrl = encodeURIComponent(targetUrl);
-    const proxyUrl = `https://corsproxy.io/?${encodedUrl}`;
+  const fetchWithCors = async (targetUrl: string) => {
+    // Our Vercel function is located at /api/proxy.
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
     
     let response;
     try {
-        // Added a 15-second timeout to prevent the app from hanging indefinitely.
+        // A client-side timeout is good practice for better user experience.
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); 
+        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 seconds
 
-        response = await fetch(proxyUrl, { ...options, signal: controller.signal });
+        response = await fetch(proxyUrl, { signal: controller.signal });
         
         clearTimeout(timeoutId);
 
     } catch (networkError) {
-        console.error("Error de red al contactar el proxy (corsproxy.io):", networkError);
-        // Handle timeout specifically
+        console.error("Error de red al contactar el proxy local (/api/proxy):", networkError);
         if (networkError instanceof Error && networkError.name === 'AbortError') {
-             throw new Error('La solicitud tardó demasiado en responder. El servicio de proxy o la tienda Shopify podrían estar lentos o no disponibles. Inténtalo de nuevo.');
+             throw new Error('La solicitud tardó demasiado. La tienda Shopify podría no responder a tiempo. Inténtalo de nuevo.');
         }
-        // Generic network error
-        throw new Error('Error de red. No se pudo contactar el servicio de proxy. Revisa tu conexión a internet y asegúrate de que no haya un bloqueador de anuncios o firewall interfiriendo.');
+        throw new Error('Error de red. No se pudo contactar tu backend. Revisa tu conexión a internet o el estado del despliegue en Vercel.');
     }
 
     if (!response.ok) {
-        // corsproxy.io passes through the status code from the target server.
         if (response.status === 404) {
              throw new Error('Error 404: No se encontró la tienda o la página de productos. Por favor, verifica que la URL de la tienda sea correcta.');
         }
-        throw new Error(`Error al obtener los datos. El servidor respondió con un error: ${response.status} ${response.statusText}.`);
+        const errorData = await response.json().catch(() => ({ error: 'No se pudo leer la respuesta de error del servidor.' }));
+        throw new Error(`Error ${response.status}: ${errorData.error || response.statusText}.`);
     }
   
     try {
-        // The response from corsproxy.io is the direct response from the Shopify server.
         const shopifyData = await response.json();
         return { data: shopifyData };
     } catch(e) {
-        console.error("Fallo al procesar la respuesta JSON de Shopify (desde corsproxy.io):", e);
-        throw new Error('La respuesta de la tienda no es un formato JSON válido. Asegúrate de que la URL corresponde a una tienda Shopify pública.');
+        console.error("Fallo al procesar la respuesta JSON del proxy:", e);
+        throw new Error('La respuesta de tu backend no es un formato JSON válido. Puede haber un problema con la función de Vercel.');
     }
   };
   
