@@ -57,6 +57,7 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
   const fetchWithCors = async (targetUrl: string) => {
     const proxies = [
         `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+        `https://cors.sh/${targetUrl}`,
         `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`
     ];
 
@@ -110,7 +111,7 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
     }
     
     // For any other kind of network failure (e.g., proxy is down, CORS issue, no internet)
-    throw new Error('Todos los servicios de proxy han fallado. Revisa tu conexión a internet y asegúrate de que no haya un bloqueador de anuncios o firewall interfiriendo.');
+    throw new Error('Todos los servicios de proxy han fallado. Si estás en una red corporativa, es posible que un firewall esté bloqueando el acceso. Intenta usar una VPN o conectarte a una red diferente (como los datos de tu móvil) y vuelve a intentarlo.');
   };
   
   // --- SHOPIFY ---
