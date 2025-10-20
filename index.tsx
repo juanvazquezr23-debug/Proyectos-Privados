@@ -98,14 +98,31 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
   };
 
   const handleAction = async () => {
-    setIsLoading(true);
     setError(null);
     setProducts([]);
+
+    if (!url) {
+      setError('Por favor, introduce la URL de la tienda Shopify.');
+      return;
+    }
+
+    let correctedUrl = url.trim();
+    if (!correctedUrl.startsWith('http://') && !correctedUrl.startsWith('https://')) {
+        correctedUrl = `https://${correctedUrl}`;
+    }
+
+    try {
+        new URL(correctedUrl);
+    } catch (_) {
+        setError('Por favor, introduce una URL con un formato válido. Ej: https://tienda.com');
+        return;
+    }
+
+    setIsLoading(true);
     setLoadingMessage('Iniciando...');
 
     try {
-      if (!url) throw new Error('Por favor, introduce la URL de la tienda Shopify.');
-      const extractedProducts = await extractShopifyProductsPublic(url);
+      const extractedProducts = await extractShopifyProductsPublic(correctedUrl);
       
       if (extractedProducts.length === 0 && !error) {
         setError('La conexión fue exitosa, pero esta tienda no tiene productos. Por favor, añade al menos un producto e inténtalo de nuevo.');
@@ -128,7 +145,11 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
 
   const getStoreIdentifier = () => {
     try {
-        return new URL(url.trim()).hostname.replace('www.', '');
+        let correctedUrl = url.trim();
+        if (!correctedUrl.startsWith('http://') && !correctedUrl.startsWith('https://')) {
+            correctedUrl = `https://${correctedUrl}`;
+        }
+        return new URL(correctedUrl).hostname.replace('www.', '');
     } catch {
         return 'export';
     }
@@ -221,7 +242,10 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
 
             <div className="form">
                 <div className="input-group vertical">
-                    <input type="url" className="url-input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Ej: https://tienda-ejemplo.com" aria-label="URL de la tienda" disabled={isLoading} />
+                    <input type="url" className="url-input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://tienda-ejemplo.com" aria-label="URL de la tienda" disabled={isLoading} />
+                    <small style={{ textAlign: 'left', color: '#666', display: 'block', marginTop: '4px' }}>
+                        La URL debe empezar con http:// o https://
+                    </small>
                 </div>
                 <button className="btn btn-primary" onClick={handleAction} disabled={isLoading} style={{width: '100%'}}>{isLoading ? 'Procesando...' : 'Extraer Productos'}</button>
             </div>
