@@ -54,41 +54,45 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
    * This is necessary for the app to function in a browser-only environment.
    */
   const fetchWithCors = async (targetUrl: string, options?: RequestInit) => {
-    // Replaced corsproxy.io with allorigins.win for better reliability without a VPN.
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+    // The corsproxy.io service allows cross-origin requests.
+    const encodedUrl = encodeURIComponent(targetUrl);
+    const proxyUrl = `https://corsproxy.io/?${encodedUrl}`;
     
     let response;
     try {
-        response = await fetch(proxyUrl, options);
+        // Added a 15-second timeout to prevent the app from hanging indefinitely.
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); 
+
+        response = await fetch(proxyUrl, { ...options, signal: controller.signal });
+        
+        clearTimeout(timeoutId);
+
     } catch (networkError) {
-        console.error("Error de red al contactar el proxy:", networkError);
-        throw new Error('Error de red al contactar el servicio de proxy. Por favor, revisa tu conexión a internet e inténtalo de nuevo.');
+        console.error("Error de red al contactar el proxy (corsproxy.io):", networkError);
+        // Handle timeout specifically
+        if (networkError instanceof Error && networkError.name === 'AbortError') {
+             throw new Error('La solicitud tardó demasiado en responder. El servicio de proxy o la tienda Shopify podrían estar lentos o no disponibles. Inténtalo de nuevo.');
+        }
+        // Generic network error
+        throw new Error('Error de red. No se pudo contactar el servicio de proxy. Revisa tu conexión a internet y asegúrate de que no haya un bloqueador de anuncios o firewall interfiriendo.');
     }
 
     if (!response.ok) {
-      throw new Error(`El servicio de proxy devolvió un error: ${response.status} ${response.statusText}.`);
+        // corsproxy.io passes through the status code from the target server.
+        if (response.status === 404) {
+             throw new Error('Error 404: No se encontró la tienda o la página de productos. Por favor, verifica que la URL de la tienda sea correcta.');
+        }
+        throw new Error(`Error al obtener los datos. El servidor respondió con un error: ${response.status} ${response.statusText}.`);
     }
   
-    const proxyData = await response.json();
-    
-    // Check for errors from the target URL (Shopify) reported by the proxy
-    if (proxyData.status && proxyData.status.http_code >= 400) {
-        if (proxyData.status.http_code === 404) {
-            throw new Error('Error 404: No se encontró la tienda o la página de productos. Por favor, verifica que la URL sea correcta.');
-        }
-        throw new Error(`La tienda devolvió un error HTTP ${proxyData.status.http_code}. Puede que no sea una tienda Shopify válida o que no sea accesible públicamente.`);
-    }
-    
-    if (!proxyData.contents) {
-      throw new Error('El proxy no pudo obtener el contenido de la URL. La URL podría ser incorrecta o la tienda podría estar bloqueando el acceso.');
-    }
-
     try {
-        const data = JSON.parse(proxyData.contents);
-        return { data };
-    } catch (e) {
-        console.error("Fallo al procesar la respuesta JSON de Shopify:", proxyData.contents);
-        throw new Error('La respuesta de la tienda no es un formato válido. Asegúrate de que la URL corresponde a una tienda Shopify.');
+        // The response from corsproxy.io is the direct response from the Shopify server.
+        const shopifyData = await response.json();
+        return { data: shopifyData };
+    } catch(e) {
+        console.error("Fallo al procesar la respuesta JSON de Shopify (desde corsproxy.io):", e);
+        throw new Error('La respuesta de la tienda no es un formato JSON válido. Asegúrate de que la URL corresponde a una tienda Shopify pública.');
     }
   };
   
@@ -103,7 +107,7 @@ const ExtractorPage: React.FC<{ user: User, onNavigate: (page: Page) => void, on
 
     while (true) {
       setLoadingMessage(`Extrayendo productos de Shopify... página ${page}`);
-      const productsJsonUrl = `${storeUrl.href}/products.json?limit=${limit}&page=${page}`;
+      const productsJsonUrl = `${storeUrl.href}products.json?limit=${limit}&page=${page}`;
       const { data } = await fetchWithCors(productsJsonUrl);
       
       if (data.products && data.products.length > 0) {
